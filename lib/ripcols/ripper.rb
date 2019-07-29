@@ -1,32 +1,39 @@
 module Ripcols
+
   class Ripper
     @@REQUIRED_PATTERNS = %i(HEADER_BEGIN HEADER_END LINE_END)
-    def initialize(patterns, in_f=$stdin, out_f=$stdout, err_f=$stderr)
+
+    def initialize(patterns, in_f=$stdin, out_f=$stdout, err_f=$stderr, column_gap=3)
       unless @@REQUIRED_PATTERNS.all? { |req_pattern| patterns.include? req_pattern }
         raise ArgumentError, "all required keys not present.\n Required keys:  #{@@REQUIRED_PATTERNS}"
       end
-      # @in_f = in_f
-      @out_f = out_f
-      @patterns = patterns.dup
 
-      @patterns[  :HEADER_SEP] ||= /\s\s+/
-      # @patterns[:LINE_COL_SEP] ||= /\s\s+/
+      @COL_GAP = column_gap
+
+      # @in_f = in_f
+      @fbuf = in_f.read
+      @out_f = out_f
+
+      col_del = /\s{#{@COL_GAP},}/
+      @patterns = patterns.dup
+      @patterns[  :HEADER_SEP] ||= col_del
+      @patterns[:LINE_COL_SEP] ||= col_del
       @patterns[    :LINE_SEP] ||= /\n/
 
 
       @hbeg_idx = nil
       @hend_idx = nil
 
-      @fbuf = in_f.read
+      @line_column_begin = 0
     end
 
     def parse
       headers = parse_head
-      header_titles = headers.map { |(t)| t }
       lines = body_lines.split( @patterns[:LINE_SEP] )
-      col_sep = @patterns[:LINE_COL_SEP]
-      lines.map { |line| header_titles.zip( line.split col_sep ).to_h }
+      # col_sep = @patterns[:LINE_COL_SEP]
+      lines.map { |line| columize_line line, headers }
     end
+
 
     def parse_head
       hbuf = header_lines
@@ -39,13 +46,73 @@ module Ripcols
         grouping
       end
 
-      k.sort { |(_, abc), (_, bbc)| abc <=> bbc }
-        .map { |(titles, bc, ec)| [titles.join(' '), bc, ec] }
+      k = k.sort { |(_, abc), (_, bbc)| abc <=> bbc }
+          .map { |(titles, bc, ec)| [titles.join(' '), bc, ec] }
 
+      if k.first
+        # todo: (possible BUG!) 
+        #  this code will break, when the initial columns dont begin from 0, 
+        #  its better to have some kind of hinting to know where the column
+        #  begins.
+        #
+        # going with simplicity, beginning_column_position of 1st column be 0,
+        k.first[1] = @line_column_begin
+      end
+
+      k
     end
 
 
     private
+
+    # line : single line of string
+    # headers : [ (title, bc, ec) ...+ ]
+    # 
+    # OUTPUT
+    # ======
+    # columized_line : Hash
+    # => {"col1": "matching stripped text", ...* }
+    #
+    # Note
+    # ====
+    # blank columns will not be part of the result.
+    # 
+    def columize_line line, headers
+      return Hash[] if headers.empty?
+
+      ks = {}
+      idx = 0
+      delim = @patterns[:LINE_COL_SEP]
+      unresolved = nil
+
+
+      headers.each do |(title, bc, ec)|
+
+        if unresolved
+          if (unresolved[:text][:bc] + @COL_GAP) <= bc
+
+            idx = unresolved[:text][:ec]
+            unresolved = nil
+          else
+          end
+        end
+
+        break unless bc_idx = line.index( /\S/, idx )
+        ec_idx = line.index( delim, bc_idx ) || -1
+        if (bc_idx - @COL_GAP) <= ec 
+          unresolved = nil
+          idx = ec_idx
+
+          ks[title] = line[bc_idx ... ec_idx]
+        else
+          unresolved = {   
+            "text":   Hash[:text, line[bc_idx ... ec_idx], :bc, bc_idx, :ec, ec_idx],
+            "header": Hash[:title, title, :bc, bc_idx, :ec, ec_idx],
+          }
+        end
+
+      end
+    end
 
     def body_lines
       header_lines unless @hend_idx
