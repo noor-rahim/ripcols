@@ -14,11 +14,16 @@ module Ripcols
       .map { |c| [c, Object.const_get(c)] }
       .to_h
    
-    f =  open( ::ARGV.first )
-    r = Ripper.new( patterns, f )
-    p JSON.dump(r.parse)
-    p JSON.dump( r.parse_head )
-    f.close
+    fbuf =  open( ::ARGV.first ) do |f|
+      until f.eof? || ((ch = f.readchar) != "\n")
+      end
+      f.pos = [f.pos.pred, 0].max
+      fbuf = f.read
+    end
+
+    r = Ripper.new( patterns, fbuf )
+    puts JSON.dump( r.parse_head )
+    puts JSON.dump( r.parse )
     
   }
 

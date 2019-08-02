@@ -3,7 +3,7 @@ module Ripcols
   class Ripper
     @@REQUIRED_PATTERNS = %i(HEADER_BEGIN HEADER_END LINE_END)
 
-    def initialize(patterns, in_f=$stdin, out_f=$stdout, err_f=$stderr, column_gap=3)
+    def initialize(patterns, str, column_gap=3, out_f=$stdout, err_f=$stderr)
       unless @@REQUIRED_PATTERNS.all? { |req_pattern| patterns.include? req_pattern }
         raise ArgumentError, "all required keys not present.\n Required keys:  #{@@REQUIRED_PATTERNS}"
       end
@@ -11,7 +11,7 @@ module Ripcols
       @COL_GAP = column_gap
 
       # @in_f = in_f
-      @fbuf = in_f.read# .lstrip
+      @fbuf = str
       @out_f = out_f
 
       col_del = /\s{#{@COL_GAP},}/
@@ -21,8 +21,8 @@ module Ripcols
       @patterns[    :LINE_SEP] ||= /\n/
 
 
-      @hbeg_idx = nil
-      @hend_idx = nil
+      @hbuf = nil
+      @bbuf = nil
 
       @line_column_begin = 0
     end
@@ -121,17 +121,9 @@ module Ripcols
       ks
     end
 
-    def body_lines
-      header_lines unless @hend_idx
-      @fbuf[@hend_idx..-1].lstrip
-    end
 
-    def header_lines
+    def seperate_body_head
       fbuf = @fbuf
-      if @hbeg_idx && @hend_idx
-        return fbuf[ @hbeg_idx .. @hend_idx ]
-      end
-
       hbeg_idx = @patterns[:HEADER_BEGIN] =~ fbuf
       unless hbeg_idx
         raise ArgumentError, "Failed to located beginning of Header"
@@ -143,12 +135,27 @@ module Ripcols
         raise ArgumentError, @patterns[:HEADER_END], "Failed to locate ending of Header"
       end
 
-      @hbeg_idx = hbeg_idx
-      @hend_idx = hbeg_idx + hend_idx
+      @hbuf = head_begin_buf[ 0..hend_idx ]
+      bbuf = $~.post_match
 
-      head_begin_buf[ 0..hend_idx ]
+      lend_idx = @patterns[:LINE_END] =~ bbuf
+      unless lend_idx
+        raise ArgumentError, @patterns[:LINE_END], "Failed to locate ending of lines"
+      end
+      @bbuf = $~.pre_match
     end
 
+    def header_lines
+      return @hbuf if @hbuf
+      seperate_body_head
+      @hbuf
+    end
+
+    def body_lines
+      return @bbuf if @bbuf
+      seperate_body_head
+      @bbuf
+    end
 
     # check whether given 2 groups appear within boundaries of each other
     # group = [ title, beginning_column, ending_col ]
