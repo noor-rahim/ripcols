@@ -22,7 +22,6 @@ module Ripcols
     end
 
     r = Ripper.new( patterns, fbuf )
-    puts JSON.dump( r.parse_head )
     puts JSON.dump( r.parse )
     
   }

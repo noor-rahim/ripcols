@@ -104,14 +104,15 @@ module Ripcols
 
         break unless bc_idx = line.index( /\S/, idx )
         ec_idx = line.index( delim, bc_idx ) || -1
+        val = line[ ec_idx == -1 ? (bc_idx .. ec_idx) : (bc_idx ... ec_idx) ]
         if (bc_idx - @COL_GAP) <= ec
           unresolved = nil
           idx = ec_idx
 
-          ks[title] = line[bc_idx ... ec_idx]
+          ks[title] = val # line[bc_idx ... ec_idx]
         else
           unresolved = {
-            "text":   Hash[:text, line[bc_idx ... ec_idx], :bc, bc_idx, :ec, ec_idx],
+            "text":   Hash[:text, val, :bc, bc_idx, :ec, ec_idx],
             "header": Hash[:title, title, :bc, bc, :ec, ec],
           }
         end
