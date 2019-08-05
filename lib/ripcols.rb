@@ -4,32 +4,41 @@ require "ripcols/version"
 
 module Ripcols
   at_exit {
-    
-    # todo: print helpful message, rather than exiting directly 
+
+    # todo: print helpful message, rather than exiting directly
     req_file = self.caller_files.first
-    exit if ::ARGV.empty? || req_file.nil?
+    exit if req_file.nil?
 
     patterns = Object.constants
       .filter { |c| c.to_s.start_with?("HEADER_") || c.to_s.start_with?("LINE_") }
       .map { |c| [c, Object.const_get(c)] }
       .to_h
-   
-    fbuf =  open( ::ARGV.first ) do |f|
-      until f.eof? || ((ch = f.readchar) != "\n")
+
+    fbuf =
+      if ::ARGV.empty?
+        self.file_contents $stdin
+      else
+        open( ::ARGV.first ) { |f| self.file_contents(f) }
       end
-      f.pos = [f.pos.pred, 0].max
-      fbuf = f.read
-    end
 
     r = Ripper.new( patterns, fbuf )
     puts JSON.dump( r.parse )
-    
+
   }
 
   private
- 
 
-  # taken from 
+  # here for future, in case we need to do some preprocessing on file
+  def self.file_contents f
+    # until f.eof? || ((ch = f.readchar) != "\n")
+    # end
+    # ch && f.ungetc(ch)
+    # f.pos = [f.pos.pred, 0].max
+    f.read
+  end
+
+
+  # taken from
   # https://github.com/sinatra/sinatra/blob/eee711bce740d38a9a91aa6028688c9a6d74b23b/lib/sinatra/base.rb#L1505
 
   # Like Kernel#caller but excluding certain magic entries and without
