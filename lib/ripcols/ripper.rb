@@ -16,10 +16,10 @@ module Ripcols
 
       col_del = /\s{#{@COL_GAP},}/
       @patterns = patterns.dup
-      @patterns[  :HEADER_SEP] ||= col_del
-      @patterns[:LINE_COL_SEP] ||= col_del
-      @patterns[    :LINE_SEP] ||= /\n/
-
+      @patterns[:HEADER_COL_SEP]  ||= col_del
+      @patterns[:LINE_COL_SEP]    ||= col_del
+      @patterns[:LINE_SEP]        ||= /\n/
+      # @patterns[:LINE_HEADER_SEP] ||= /\n+/
 
       @hbuf = nil
       @bbuf = nil
@@ -40,7 +40,7 @@ module Ripcols
       k = hbuf.lines.reduce([]) do |grouping, l|
         off = 0
         l.strip
-          .split( @patterns[:'HEADER_SEP'] )
+          .split( @patterns[:'HEADER_COL_SEP'] )
           .each do |w|
             if w.empty?
               next
@@ -66,6 +66,14 @@ module Ripcols
       end
 
       k
+    end
+
+    def debug!
+      seperate_body_head
+      puts "HEADER\n______"
+      p header_lines
+      puts "BODY\n____"
+      p body_lines
     end
 
 
@@ -108,8 +116,9 @@ module Ripcols
         if (bc_idx - @COL_GAP) <= ec
           unresolved = nil
           idx = ec_idx
-
           ks[title] = val # line[bc_idx ... ec_idx]
+
+          break if ec_idx == -1
         else
           unresolved = {
             "text":   Hash[:text, val, :bc, bc_idx, :ec, ec_idx],
@@ -131,14 +140,19 @@ module Ripcols
       end
 
       head_begin_buf = fbuf[ hbeg_idx .. -1 ]
+      if head_begin_buf.start_with? "\n"
+        head_begin_buf.sub!(/\n+/, '')
+      end
       hend_idx = @patterns[:HEADER_END] =~ head_begin_buf
       unless hend_idx
         raise ArgumentError, @patterns[:HEADER_END], "Failed to locate ending of Header"
       end
-
       @hbuf = head_begin_buf[ 0..hend_idx ]
-      bbuf = $~.post_match
 
+      bbuf = $~.post_match
+      if bbuf.start_with? "\n"
+        bbuf.sub!(/\n+/, '')
+      end
       lend_idx = @patterns[:LINE_END] =~ bbuf
       unless lend_idx
         raise ArgumentError, @patterns[:LINE_END], "Failed to locate ending of lines"
