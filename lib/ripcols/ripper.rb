@@ -11,7 +11,7 @@ module Ripcols
       @COL_GAP = column_gap
 
       # @in_f = in_f
-      @fbuf = in_f.read
+      @fbuf = in_f.read# .lstrip
       @out_f = out_f
 
       col_del = /\s{#{@COL_GAP},}/
@@ -31,18 +31,24 @@ module Ripcols
       headers = parse_head
       lines = body_lines.split( @patterns[:LINE_SEP] )
       # col_sep = @patterns[:LINE_COL_SEP]
-      lines.map { |line| columize_line line, headers }
+      lines.map { |line| columize_line(line, headers) }
     end
 
 
     def parse_head
       hbuf = header_lines
-
       k = hbuf.lines.reduce([]) do |grouping, l|
         off = 0
         l.strip
           .split( @patterns[:'HEADER_SEP'] )
-          .each { |w| bc = l.index(w, off);  off = ec = bc + w.length; insert_to( grouping , w, bc, ec);  }
+          .each do |w|
+            if w.empty?
+              next
+            end
+            bc = l.index(w, off)
+            off = ec = bc + w.length
+            insert_to( grouping , w, bc, ec )
+          end
         grouping
       end
 
@@ -50,8 +56,8 @@ module Ripcols
           .map { |(titles, bc, ec)| [titles.join(' '), bc, ec] }
 
       if k.first
-        # todo: (possible BUG!) 
-        #  this code will break, when the initial columns dont begin from 0, 
+        # todo: (possible BUG!)
+        #  this code will break, when the initial columns dont begin from 0,
         #  its better to have some kind of hinting to know where the column
         #  begins.
         #
@@ -67,7 +73,7 @@ module Ripcols
 
     # line : single line of string
     # headers : [ (title, bc, ec) ...+ ]
-    # 
+    #
     # OUTPUT
     # ======
     # columized_line : Hash
@@ -76,7 +82,7 @@ module Ripcols
     # Note
     # ====
     # blank columns will not be part of the result.
-    # 
+    #
     def columize_line line, headers
       return Hash[] if headers.empty?
 
@@ -85,38 +91,39 @@ module Ripcols
       delim = @patterns[:LINE_COL_SEP]
       unresolved = nil
 
-
       headers.each do |(title, bc, ec)|
 
         if unresolved
-          if (unresolved[:text][:bc] + @COL_GAP) <= bc
-
+          if (unresolved[:text][:ec] + @COL_GAP) < bc
+            head = unresolved[:header]
+            ks[ head[:title] ] = unresolved[:text][:text]
             idx = unresolved[:text][:ec]
             unresolved = nil
-          else
           end
         end
 
         break unless bc_idx = line.index( /\S/, idx )
         ec_idx = line.index( delim, bc_idx ) || -1
-        if (bc_idx - @COL_GAP) <= ec 
+        if (bc_idx - @COL_GAP) <= ec
           unresolved = nil
           idx = ec_idx
 
           ks[title] = line[bc_idx ... ec_idx]
         else
-          unresolved = {   
+          unresolved = {
             "text":   Hash[:text, line[bc_idx ... ec_idx], :bc, bc_idx, :ec, ec_idx],
-            "header": Hash[:title, title, :bc, bc_idx, :ec, ec_idx],
+            "header": Hash[:title, title, :bc, bc, :ec, ec],
           }
         end
 
       end
+
+      ks
     end
 
     def body_lines
       header_lines unless @hend_idx
-      @fbuf[@hend_idx..-1].lstrip 
+      @fbuf[@hend_idx..-1].lstrip
     end
 
     def header_lines
@@ -133,7 +140,7 @@ module Ripcols
       head_begin_buf = fbuf[ hbeg_idx .. -1 ]
       hend_idx = @patterns[:HEADER_END] =~ head_begin_buf
       unless hend_idx
-        raise ArgumentError, @patterns[:HEADER_END], "Failed to locate ending of Header" 
+        raise ArgumentError, @patterns[:HEADER_END], "Failed to locate ending of Header"
       end
 
       @hbeg_idx = hbeg_idx
@@ -149,14 +156,14 @@ module Ripcols
     def overlap?( group_a, group_b )
       (_, a_bc, a_ec) = group_a
       (_, b_bc, b_ec) = group_b
-      (b_bc.between?( a_bc, a_ec.pred ) || 
-       b_ec.between?( a_bc, a_ec.pred ) || 
+      (b_bc.between?( a_bc, a_ec.pred ) ||
+       b_ec.between?( a_bc, a_ec.pred ) ||
        a_bc.between?( b_bc, b_ec.pred ))
     end
 
 
     def insert_to( grouping , title, bc, ec )
-      group = grouping.find { |group| overlap?(group, [title, bc, ec]) } 
+      group = grouping.find { |group| overlap?(group, [title, bc, ec]) }
       if group
         group[0].push( title )
         ibc, iec = group[1..2]

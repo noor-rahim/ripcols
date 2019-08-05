@@ -15,7 +15,9 @@ module Ripcols
       .to_h
    
     f =  open( ::ARGV.first )
-    puts JSON.dump(Ripper.new( patterns, f ).parse)
+    r = Ripper.new( patterns, f )
+    p JSON.dump(r.parse)
+    p JSON.dump( r.parse_head )
     f.close
     
   }
